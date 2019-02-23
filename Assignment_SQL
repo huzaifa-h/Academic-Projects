@@ -1,0 +1,104 @@
+-- Task 1: Understanding the data in hand
+-- A
+-- The data available is apparently of a ecommerce company. This being substantiated with the details of product, customer and shipping. 
+-- Cust_dimen table consists of the data about customer name, their geographical location, type of customer (corporate, consumer, etc) and customer ID. 
+-- market_fact table is the table with most detials and is connected to all the other tables with a common field (not using the term Foreign Key as will be elaborated later). It has information related to order, product, shipping and even the details related to order quantity, profit and margin.
+-- orders_dimen table consists of information related to order ID, date and priority.
+-- prod_dimen table consists of the classsifies product cetegory into sub category and assigns prod ID to specific product in each sub category
+-- shipping_dimen table provides information about which order ID was dispatched on which date, what is its shipping priority and gives its shipping ID
+-- Cursory review of the database suggests that there is a lot of information in the database which can be used to analyse and figure out profit, profit margin, shipping cost, sales, discount offered based on products, customer, orders, etc.
+
+
+# B
+-- Table: cust_dimen: Primary Key = cust_id / Foreign Key = None
+-- Table: orders_dimen: Primary Key = Ord_id / Foreign Key = Order_ID
+-- Table: market_fact: Primary Key = None / Foreign Key = Ord_id, Prod_id, ship_id & cust_id
+-- Table: prod_dimen: Primary Key = Prod_id / Foreign Key = None
+-- Table: Shipping_dimen: Primary Key = Ship_id / Foreign Key = Order_id
+
+SET GLOBAL sql_mode = 'ONLY_FULL_GROUP_BY';
+select @@GLOBAL.sql_mode;
+
+# Task 2: Basic Analysis
+# Write the SQL queries for the following:
+
+# A. Find the total and the average sales (display total_sales and avg_sales)
+
+select sum(sales) as total_sales, avg(sales) as avg_sales
+from market_fact;
+
+# B. Display the number of customers in each region in decreasing order of
+# no_of_customers. The result should contain columns Region, no_of_customers
+
+select Region, count(customer_name) as no_of_customers
+from cust_dimen
+group by region
+order by no_of_customers desc;
+
+# C. Find the region having maximum customers (display the region name and
+# max(no_of_customers)
+
+select Region, count(Cust_id) as no_of_Customers
+from cust_dimen
+group by Region
+order by no_of_customers DESC
+LIMIT 1;
+
+
+# D. Find the number and id of products sold in decreasing order of products sold (display
+# product id, no_of_products sold)
+
+select prod_id, sum(order_quantity) as q_sold
+from market_fact
+group by prod_id
+order by q_sold desc;
+
+# E. Find all the customers from Atlantic region who have ever purchased ‘TABLES’ and
+# the number of tables purchased (display the customer name, no_of_tables
+# purchased) 
+
+select cd.customer_name, sum(mf.order_quantity) as Tables_Purchased
+from market_fact mf inner join cust_dimen cd on mf.cust_id = cd.cust_id inner join prod_dimen pd on mf.prod_id = pd.prod_id
+where cd.region = "Atlantic" and pd.Product_Sub_Category = "tables"
+group by cd.customer_name
+order by sum(mf.order_quantity) desc;
+
+# TASK 3
+
+# A) Display the product categories in descending order of profits 
+# (display the product category wise profits i.e. product_category, profits)?
+
+select pd.product_category as Product_category, sum(mf.profit) as profits
+from market_fact mf inner join prod_dimen pd on mf.prod_id = pd.prod_id
+group by pd.product_category
+order by profits desc;
+
+# B) Display the product category, product sub-category and the profit 
+# within each subcategory in three columns.
+
+select pd.product_category as "Product Category", pd.product_sub_category as "Product sub-category", 
+sum(mf.profit) as Profit
+from market_fact mf inner join prod_dimen pd on mf.prod_id = pd.prod_id
+group by pd.Product_Sub_Category
+order by pd.Product_Category;
+
+-- If the above code doesnt give any result and gives Error 1054 please run the below code and then run the answer code
+#SET sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));
+
+# C) Where is the least profitable product subcategory shipped the most? 
+# For the least profitable product sub-category, display the  region-wise 
+# no_of_shipments and the profit made in each region in decreasing order 
+# of profits (i.e. region, no_of_shipments, profit_in_each_region) 
+
+select cd.region, count(mf.ship_id), sum(mf.profit)
+from market_fact mf inner join prod_dimen pd on mf.prod_id = pd.prod_id
+inner join cust_dimen cd on mf.cust_id = cd.cust_id
+where product_sub_category = (select pd.product_sub_category
+from market_fact mf inner join prod_dimen pd on mf.prod_id = pd.prod_id 
+group by product_sub_category
+order by sum(mf.profit) asc
+limit 1)
+group by cd.region
+order by sum(mf.profit);
+
+
