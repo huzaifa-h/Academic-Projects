@@ -1,0 +1,528 @@
+
+ADD JAR /opt/cloudera/parcels/CDH/lib/hive/lib/hive-hcatalog-core-1.1.0-cdh5.11.2.jar;
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.max.dynamic.partitions = 1000;
+SET hive.exec.max.dynamic.partitions.pernode = 1000;
+SET hive.execution.engine=mr;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS taxifare_all_dump(vendorid int, tpep_pickup_timestamp string, tpep_dropoff_timestamp string, passenger_count int, trip_distance double, rate_code int, store_forward_flag string, pickup_location int, dropoff_location int, payment_type int, fare_charge double, extra_charge double, mta_tax_charge double, tip_amount double, tolls_charge double, improvement_surcharge double, total_charge double)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+LOCATION '/common_folder/nyc_taxi_data/'
+tblproperties ("skip.header.line.count"="2");
+
+/*Check the table*/
+
+select * from taxifare_all_dump limit 10
+
+/*1.3 How many records has each TPEP [Taxi-Passenger Experience Enhancement Program Provider] provided?*/
+
+select vendorid as Vendor_Id_1CreativeMob_2VeriFone, count(*) as Num_Records
+
+from taxifare_all_dump
+
+group by vendorid
+
+order by vendorid;
+
+/*Creative Moblie Technologies,LLC provided 84,47,149 records [8.47 million records]*/
+/*VeriFone Inc. provided 103,45,930 records [10.34 million records]*/
+
+/*The data provided is for months November and December only. Check whether the data is consistent, and if not, identify the data quality issues. Mention all data quality issues in comments.*/
+
+/*Data Quality Check on Year and Month*/
+
+SELECT YEAR(tpep_pickup_timestamp) as PICKUP_YEAR,
+
+       MONTH(tpep_pickup_timestamp)  as PICKUP_MONTH,
+ 
+      YEAR(tpep_dropoff_timestamp)  as DROPOFF_YEAR, 
+
+       MONTH(tpep_dropoff_timestamp)  as DROPOFF_MONTH, 
+       
+COUNT(1) as trip_count
+FROM taxifare_all_dump
+
+GROUP BY YEAR(tpep_pickup_timestamp),MONTH(tpep_pickup_timestamp), YEAR(tpep_dropoff_timestamp), MONTH(tpep_dropoff_timestamp)
+
+ORDER BY PICKUP_YEAR, 
+PICKUP_MONTH ASC;
+
+/*There is data for Jan, Feb, March, Oct, etc along with data for Nov and Dec, which is to be used for analysis*/
+/*Data is also for years 2001, 2003, 2008, 2009 and 2018*/
+
+/*Check on rate_code*/
+
+SELECT CASE rate_code
+
+WHEN 1 THEN 'Standard Rate'
+
+WHEN 2 THEN 'JFK'
+
+When 3 THEN 'Newark'
+
+WHEN 4 THEN 'Nassau or Westchester'
+
+WHEN 5 THEN 'Negotiated Fare'
+
+WHEN 6 THEN 'Group Ride'
+ELSE rate_code END AS rate_code,
+
+count(1) as trip_count
+from taxifare_all_dump
+
+GROUP BY rate_code
+
+/*There are 178 records with rate code '99' which is an invalid rate_code*/
+
+/*Check on passenger_count*/
+
+SELECT passenger_count,
+
+count(1) as trip_count
+from taxifare_all_dump
+
+GROUP BY passenger_count
+
+/*There are 108970 records reocrds with 0 passenger. This is invalid.*/
+
+/*There is 1 record for 192 passengers. This is invalid as well*/
+
+/*Check on store_forward_flag*/
+
+SELECT CASE store_forward_flag
+
+WHEN 'Y' THEN 'Store and Forward Trip'
+
+WHEN 'N' THEN 'Note state and forward trip'
+ 
+ELSE store_forward_flag END AS store_forward_flag,
+
+count(1) as trip_count
+from taxifare_all_dump
+
+GROUP BY store_forward_flag;
+
+/*No issues with the entire set of records*/
+
+/*Check on payment_type*/
+
+SELECT CASE payment_type
+
+WHEN 1 THEN 'Credit card'
+
+WHEN 2 THEN 'Cash'
+
+WHEN 3 THEN 'No Charge'
+
+WHEN 4 THEN 'Dispute'
+
+WHEN 5 THEN 'Unknown'
+
+WHEN 6 THEN 'Voided Trip'
+
+ELSE payment_type END AS payment_type,
+
+count(1) as trip_count
+from taxifare_all_dump
+
+GROUP BY payment_type;
+
+/*No issues with entire set of records for payment_type*/
+
+
+/*Checking for Negative Values in "fare_charge", "extra_charge", "mta_tax_charge", "tip_amount", "tolls_charge", "improvement_surcharge", "total_charge*/
+
+SELECT count(*)
+from taxifare_all_dump
+
+WHERE 1 = CASE
+
+WHEN trip_distance < 0 OR
+
+fare_charge < 0 OR
+
+extra_charge < 0 OR
+
+mta_tax_charge < 0 OR
+
+tip_amount < 0 OR
+
+tolls_charge < 0 OR
+
+improvement_surcharge < 0 OR
+
+total_charge < 0 
+THEN 1 ELSE 0 
+End;
+
+/*There are 9381 records with negative value*/
+
+/*Checking for NULL values in the table*/
+
+SELECT count(*)
+from taxifare_all_dump
+
+WHERE 1 = CASE
+
+WHEN vendorid IS NULL OR
+
+tpep_pickup_timestamp IS NULL OR
+
+tpep_dropoff_timestamp is NULL OR
+
+passenger_count IS NULL OR
+
+trip_distance IS NULL OR
+
+rate_code IS NULL OR
+
+store_forward_flag IS NULL OR
+
+pickup_location IS NULL OR
+
+dropoff_location IS NULL OR
+
+payment_type IS NULL OR
+
+fare_charge IS NULL OR
+
+extra_charge IS NULL OR
+
+mta_tax_charge IS NULL OR
+
+tip_amount IS NULL OR
+
+tolls_charge IS NULL OR
+
+improvement_surcharge IS NULL OR
+
+total_charge IS NULL
+THEN 1 ELSE 0 END;
+
+/*No NULL values across the data*/
+
+-- Conclusion on Data issues
+ 
+-- There is data for Jan, Feb, March, Oct, etc along with data for Nov and Dec, which is to be used for analysis
+
+-- Data is also for years 2001, 2003, 2008, 2009 and 2018
+
+-- There are 178 records with rate code '99' which is an invalid rate_code
+
+-- There are 108970 records reocrds with 0 passenger. This is invalid
+
+-- There is 1 record for 192 passengers. This is invalid as well
+
+-- There are 9381 records with negative value in "fare_charge", "extra_charge", "mta_tax_charge", "tip_amount", "tolls_charge", "improvement_surcharge", "total_charge
+
+/*You might have encountered unusual or erroneous rows in the dataset. Can you conclude which vendor is doing a bad job in providing the records using different columns of the dataset?*/
+
+-- Check where the trip distance is less then or equal to 0 and the total charge is greater then 0 and check by vendor
+SELECT CASE vendorid
+
+when 1 THEN 'Creative Mobile Technologies, LLC'
+
+WHEN 2 THEN 'VeriFone Inc'
+
+ELSE vendorid END AS vendor,
+
+count(1) as trip_count
+from taxifare_all_dump
+
+WHERE trip_distance <= 0 AND fare_charge > 0 
+
+GROUP BY vendorid;
+
+-- Creative Mobile Technologies, LLC: 67615 records
+
+-- VeriFone Inc: 48158  records
+
+
+-- Checking where number of passenger is updated as 0 and fare and trip distance is greater than 0
+
+SELECT CASE vendorid
+
+when 1 THEN 'Creative Mobile Technologies, LLC'
+
+WHEN 2 THEN 'VeriFone Inc'
+
+ELSE vendorid END AS vendor,
+
+count(1) as trip_count
+from taxifare_all_dump
+
+where passenger_count <= 0 and fare_charge > 0 and trip_distance > 0 
+
+GROUP BY vendorid;
+
+-- Creative Mobile Technologies, LLC: 107196 records
+
+-- VeriFone Inc: 66  records
+
+
+-- Conclusion:
+
+-- Creative Mobile Technologies, LLC is worst of the 2 vendors in recording the data correctly
+
+CREATE EXTERNAL TABLE IF NOT EXISTS orc_parted_taxifare(vendorid int, tpep_pickup_timestamp string, tpep_dropoff_timestamp string,
+passenger_count int, trip_distance double,rate_code int, store_forward_flag string, pickup_location int, dropoff_location int,
+payment_type int, fare_charge double, extra_charge double, mta_tax_charge double, tip_amount double, tolls_charge double,
+improvement_surcharge double, total_charge double) PARTITIONED BY (mnth int, m_day int)
+STORED AS orc
+LOCATION '/user/hive/warehouse/huzaifa_orc'
+
+INSERT OVERWRITE TABLE orc_parted_taxifare PARTITION(mnth, m_day)
+select vendorid, tpep_pickup_timestamp, tpep_dropoff_timestamp, passenger_count, trip_distance, rate_code, store_forward_flag,
+pickup_location, dropoff_location, payment_type, fare_charge, extra_charge, mta_tax_charge, tip_amount, tolls_charge,
+improvement_surcharge, total_charge, month(tpep_pickup_timestamp)as mnth, day(tpep_pickup_timestamp)as m_day
+from taxifare_all_dump
+where year(tpep_pickup_timestamp)=2017 and month(tpep_pickup_timestamp) in (11,12) and year(tpep_dropoff_timestamp)=2017 
+and month(tpep_dropoff_timestamp) in (11,12) and unix_timestamp(tpep_pickup_timestamp) < unix_timestamp(tpep_dropoff_timestamp) 
+and passenger_count in(1,2,3,4,5,6) and trip_distance > 0.0 and rate_code in(1,2,3,4,5,6) and payment_type in (1,2,3,4,5,6) 
+and fare_charge > 0 and extra_charge in (0,0.5,1) and mta_tax_charge in(0,0.5) and tip_amount>=0.0 and tolls_charge >= 0.0 
+and improvement_surcharge in (0,0.3) and total_charge > 0;
+
+
+
+-- Compare average fare for Nov and Dec
+
+SELECT 
+avg(total_charge) as Avg_fare, mnth as Month
+
+from orc_parted_taxifare
+
+GROUP BY mnth
+
+
+-- The average fare for November and December.
+
+-- November -- 16.19148596085386
+
+-- December -- 15.942424116315982
+
+-- Average fare for November is slightly better than December
+
+-- Explore the ‘number of passengers per trip’ - how many trips are made by each level of ‘Passenger_count’? 
+
+-- Do most people travel solo or with other people?
+
+
+SELECT passenger_count as passenger_count,
+
+count(1) as trip_count
+from orc_parted_taxifare
+
+GROUP BY passenger_count
+
+ORDER BY trip_count DESC;
+
+
+-- Taking passenger count only to the maximum of 6 because over 6 passengers in a commercial vehicle of a large size too sounds unrealistic.
+
+--Trip count based on ‘Passenger_count’
+-------
+--Passenger Count 1  --> 13102523 Trips
+
+--Passenger Count 2  --> 2785290 Trips
+
+--Passenger Count 5  --> 868304 Trips
+
+--Passenger Count 3  --> 802909 Trips
+
+--Passenger Count 6  --> 527325 Trips
+
+--Passenger Count 4  --> 394616 Trips
+
+
+-- There is quite significant difference between 1 and 2 passenger count. We can safely say that most people prefer to travel solo.
+
+-- Which is the most preferred mode of payment?
+
+
+SELECT 
+CASE payment_type 
+
+WHEN 1 THEN 'credit card'
+
+WHEN 2 THEN 'cash'
+
+WHEN 3 THEN 'No charge'
+
+WHEN 4 THEN 'dispute'
+
+WHEN 5 THEN 'unknown'
+
+WHEN 6 THEN 'voided trip'
+
+ELSE payment_type END AS payment_type,
+
+count(1) as trip_count
+
+from orc_parted_taxifare
+
+GROUP BY payment_type
+
+ORDER BY trip_count DESC;
+
+
+
+--Payment Type : Credit card  --> 12469337
+
+--Payment Type : Cash         --> 5914388
+
+--Payment Type : No charge    --> 75884
+
+--Payment Type : Dispute      --> 21358
+
+
+-- Credit card is the most preferred mode of payment.
+
+-- What is the average tip paid? Compare the average tip with the 25th, 50th and 75th percentiles and comment 
+
+-- whether the ‘average tip’ is a representative statistic (of the central tendency) of ‘tip amount paid’.
+
+
+
+SELECT avg(tip_amount) as Avg_Tip
+
+from orc_parted_taxifare;
+
+
+
+-- Average tip amount is just a little under $2 at $1.8243552510017795.
+
+
+
+SELECT percentile_approx(tip_amount, array(0.25, 0.5, 0.75))
+
+from orc_parted_taxifare;
+
+
+
+-- 25th, 50th and 75th percentiles of tip amount
+ -- [0.0,1.36,2.45]
+
+
+-- Average tip_amount paid       : 1.82
+
+-- 50th percentile of tip amount : 1.36
+
+-- The ‘average tip’ is not a representative statistic (of the central tendency) of ‘tip amount paid’.
+
+-- Explore the ‘Extra’ (charge) variable - what is the fraction of total trips where an extra charge is levied?
+
+
+
+SELECT sum(if(extra_charge>0,1,0)) as trips_with_extracharge,
+
+sum(if(extra_charge>0,1,0))/count(*) as fraction_of_total_trips
+
+from orc_parted_taxifare;
+
+
+-- Total trips where an extra charge is levied : 8524850
+
+-- Fraction of Total trips where an extra charge is levied : 0.46127726974459726 (46%)
+
+-- What is the correlation between the number of passengers and tip paid? Do multiple travellers pay more compared to solo travellers?
+
+
+
+SELECT corr(passenger_count, tip_amount)
+
+FROM orc_parted_taxifare;
+
+
+
+-- Correlation between the number of passengers and tip paid: -0.004675228162174248
+
+-- It indicates Weak Negative Correlation.
+
+-- It means as number of passengers increases, the tip amount decreases slightly.
+
+-- Based on correlation value, solo travellers pay more compared to multiple travellers.
+
+-- Create five buckets of ‘tip paid’: [0-5), [5-10), [10-15) , [15-20) and >=20. 
+
+-- Calculate the percentage share of each bucket (i.e. the fraction of trips falling in each bucket).
+
+
+
+SELECT (SUM(IF(tip_amount >=0 AND tip_amount < 5, 1,0))/COUNT(*))*100 AS bin_0_5,
+
+(SUM(IF(tip_amount >=5 AND tip_amount < 10, 1,0))/COUNT(*))*100 AS bin_5_10,
+
+(SUM(IF(tip_amount >=10 AND tip_amount < 15, 1,0))/COUNT(*))*100 AS bin_10_15,
+
+(SUM(IF(tip_amount >=15 AND tip_amount < 20, 1,0))/COUNT(*))*100 AS bin_15_20,
+
+(SUM(IF(tip_amount >=20, 1,0))/COUNT(*))*100 AS bin_above_20
+
+from orc_parted_taxifare;
+
+
+
+-- Fraction of Trips Falling in Bucket [0-5)   - 92.41118173091267
+
+-- Fraction of Trips Falling in Bucket [5-10)  - 5.623358344831199
+
+-- Fraction of Trips Falling in Bucket [10-15) - 1.684522243884749
+
+-- Fraction of Trips Falling in Bucket [15-20) - 0.1910830748196239
+
+-- Fraction of Trips Falling in Bucket >=20    - 0.08985460555175495
+
+-- Which month has a greater average ‘speed’ - November or December? Note that the variable ‘speed’ will have to be derived from other metrics.
+
+
+
+SELECT mnth,
+AVG(trip_distance/((UNIX_TIMESTAMP(tpep_dropoff_timestamp) - UNIX_TIMESTAMP(tpep_pickup_timestamp))/3600)) as Avg_Speed_MPH
+
+from orc_parted_taxifare
+
+GROUP BY mnth;
+
+
+
+-- November Month has average ‘speed’ as 12.69489965085984 Miles Per Hour
+
+-- December Month has average ‘speed’ as 12.624610728364463 Miles Per Hour
+
+-- Based on average ‘speed’ values between the two months there is not much difference between the two. Just that November speed is slightly more.
+
+-- Analyse the average speed of the most happening days of the year i.e. 31st December (New year’s eve) and 
+-- 25th December (Christmas Eve) and 
+-- compare it with the overall average
+
+
+SELECT FROM_UNIXTIME(UNIX_TIMESTAMP(tpep_pickup_timestamp), 'dd-MMM-yyyy') as Happening_Day, 
+
+AVG(trip_distance/((UNIX_TIMESTAMP(tpep_dropoff_timestamp) - UNIX_TIMESTAMP(tpep_pickup_timestamp))/3600)) as Avg_Speed_MPH
+
+from orc_parted_taxifare
+
+where mnth = 12
+ and day(tpep_pickup_timestamp) IN(25,31)
+
+GROUP BY FROM_UNIXTIME(UNIX_TIMESTAMP(tpep_pickup_timestamp), 'dd-MMM-yyyy');
+
+
+
+SELECT
+AVG(trip_distance/((UNIX_TIMESTAMP(tpep_dropoff_timestamp) - UNIX_TIMESTAMP(tpep_pickup_timestamp))/3600)) as Avg_Speed_MPH
+
+from orc_parted_taxifare;
+
+
+
+-- On 25-Dec-2017, the average ‘speed’ was 16.859278575939957 Miles Per Hour
+
+-- On 31-Dec-2017, the average ‘speed’ was 14.09092230997586 Miles Per Hour
+
+-- Overall average ‘speed’ was 12.659342619403029
+
+-- Based on average ‘speed’ values. Speed is higher on special days as compared to overall averages 
+
+-- the average speed  was significantly high on 25-Dec-2017 when compared to overall average or monthly average or even compared to 31-Dec-2017
+
